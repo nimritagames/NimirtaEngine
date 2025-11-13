@@ -37,6 +37,7 @@ public:
 
     void render(sf::RenderWindow* window) override {
         sf::CircleShape circle(radius);
+        // Position is stored as center, SFML CircleShape uses top-left origin
         circle.setPosition({position.x - radius, position.y - radius});
         circle.setFillColor(color);
         window->draw(circle);
@@ -68,7 +69,13 @@ public:
         return radius;
     }
 
+    // Get bounding box for the circle (for AABB collision checks)
     sf::FloatRect getBounds() const {
         return sf::FloatRect({position.x - radius, position.y - radius}, {radius * 2, radius * 2});
+    }
+
+    // Get center position (ball position is stored as center)
+    Engine::Math::Vector2 getCenter() const {
+        return position;
     }
 };

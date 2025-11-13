@@ -43,6 +43,23 @@ namespace Engine {
                 }
                 return Vector2(0.0f, 0.0f);
             }
+
+            // Dot product
+            float dot(const Vector2& other) const {
+                return x * other.x + y * other.y;
+            }
+
+            // Distance between two points
+            static float distance(const Vector2& a, const Vector2& b) {
+                return (b - a).magnitude();
+            }
+
+            // Clamp a value between min and max
+            static float clamp(float value, float min, float max) {
+                if (value < min) return min;
+                if (value > max) return max;
+                return value;
+            }
         };
     }
 }

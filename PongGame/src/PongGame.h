@@ -124,22 +124,62 @@ protected:
         checkCollisions();
     }
 
+    // Circle-Rectangle collision detection
+    bool checkCircleRectCollision(const Engine::Math::Vector2& circleCenter, float radius,
+                                   const Engine::Math::Vector2& rectPos, const sf::Vector2f& rectSize) {
+        // Find the closest point on the rectangle to the circle center
+        float closestX = Engine::Math::Vector2::clamp(circleCenter.x, rectPos.x, rectPos.x + rectSize.x);
+        float closestY = Engine::Math::Vector2::clamp(circleCenter.y, rectPos.y, rectPos.y + rectSize.y);
+
+        // Calculate distance between circle center and closest point
+        Engine::Math::Vector2 closest(closestX, closestY);
+        float distance = Engine::Math::Vector2::distance(circleCenter, closest);
+
+        return distance < radius;
+    }
+
     void checkCollisions() {
         auto ballPos = ball->getPosition();
         float ballRadius = ball->getRadius();
 
-        if (ballPos.y - ballRadius <= 0 || ballPos.y + ballRadius >= WINDOW_HEIGHT) {
+        // Wall collisions (top and bottom)
+        if (ballPos.y - ballRadius <= 0) {
             ball->bounceY();
+            // Push ball out of wall to prevent getting stuck
+            ball->setPosition(ballPos.x, ballRadius);
+        } else if (ballPos.y + ballRadius >= WINDOW_HEIGHT) {
+            ball->bounceY();
+            // Push ball out of wall to prevent getting stuck
+            ball->setPosition(ballPos.x, WINDOW_HEIGHT - ballRadius);
         }
 
-        if (ball->getBounds().findIntersection(leftPaddle->getBounds()).has_value()) {
-            ball->handlePaddleCollision(leftPaddle->getCenterY());
+        // Paddle collisions (use circle-rectangle collision)
+        auto leftPaddlePos = leftPaddle->getPosition();
+        auto leftPaddleSize = leftPaddle->getSize();
+        auto rightPaddlePos = rightPaddle->getPosition();
+        auto rightPaddleSize = rightPaddle->getSize();
+
+        // Left paddle collision
+        if (checkCircleRectCollision(ballPos, ballRadius, leftPaddlePos, leftPaddleSize)) {
+            // Only process collision if ball is moving towards paddle (prevent double bounce)
+            if (ball->getVelocity().x < 0) {
+                ball->handlePaddleCollision(leftPaddle->getCenterY());
+                // Push ball out of paddle to prevent getting stuck
+                ball->setPosition(leftPaddlePos.x + leftPaddleSize.x + ballRadius, ballPos.y);
+            }
         }
 
-        if (ball->getBounds().findIntersection(rightPaddle->getBounds()).has_value()) {
-            ball->handlePaddleCollision(rightPaddle->getCenterY());
+        // Right paddle collision
+        if (checkCircleRectCollision(ballPos, ballRadius, rightPaddlePos, rightPaddleSize)) {
+            // Only process collision if ball is moving towards paddle (prevent double bounce)
+            if (ball->getVelocity().x > 0) {
+                ball->handlePaddleCollision(rightPaddle->getCenterY());
+                // Push ball out of paddle to prevent getting stuck
+                ball->setPosition(rightPaddlePos.x - ballRadius, ballPos.y);
+            }
         }
 
+        // Scoring (left and right boundaries)
         if (ballPos.x - ballRadius <= 0) {
             rightScore++;
             ball->reset(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
