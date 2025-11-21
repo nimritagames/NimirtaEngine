@@ -21,18 +21,8 @@ enum class ColliderType {
     Box
 };
 
-// Physics material - how objects interact
-struct PhysicsMaterial2D {
-    float friction = 0.3f;         // Surface friction (0 = ice, 1 = rubber)
-    float restitution = 0.0f;      // Bounciness (0 = no bounce, 1 = perfect bounce)
-    float density = 1.0f;          // Mass per unit area
-
-    PhysicsMaterial2D() = default;
-    PhysicsMaterial2D(float f, float r)
-        : friction(f), restitution(r) {}
-    PhysicsMaterial2D(float f, float r, float d)
-        : friction(f), restitution(r), density(d) {}
-};
+// Forward declare material (defined in PhysicsMaterial.h)
+class PhysicsMaterial2D;
 
 // Collision information passed to user callbacks
 struct CollisionInfo {
@@ -58,15 +48,22 @@ struct Manifold {
     float restitution = 0.0f;      // Combined restitution
     float friction = 0.0f;         // Combined friction
 
+    // Accumulated impulses for warm starting (Erin Catto technique)
+    float accumulatedNormalImpulse = 0.0f;
+    float accumulatedTangentImpulse = 0.0f;
+
     Manifold() = default;
 };
 
 // Physics constants
 namespace PhysicsConstants {
     const float FIXED_TIMESTEP = 1.0f / 60.0f;  // 60 Hz physics update
-    const float SLOP = 0.01f;                    // Penetration allowance
-    const float BAUMGARTE = 0.2f;               // Position correction percent
-    const float VELOCITY_EPSILON = 0.0001f;     // Minimum velocity to consider
+    const float SLOP = 0.005f;                   // Penetration allowance (1-2 pixels)
+    const float BAUMGARTE = 0.2f;                // Position correction percent (0.2 = 20% per frame)
+    const float VELOCITY_EPSILON = 0.0001f;      // Minimum velocity to consider
+    const int VELOCITY_ITERATIONS = 6;           // Velocity solver iterations (6-8 recommended)
+    const int POSITION_ITERATIONS = 2;           // Position solver iterations (2-3 recommended)
+    const float MAX_LINEAR_CORRECTION = 5.0f;    // Max position correction per frame (pixels)
 }
 
 }}

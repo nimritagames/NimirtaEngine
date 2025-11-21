@@ -64,7 +64,7 @@ public:
     void debugDraw(sf::RenderWindow* window) const override {
         Math::Vector2 pos = getWorldPosition();
         sf::CircleShape circle(radius);
-        circle.setPosition(pos.x - radius, pos.y - radius);
+        circle.setPosition(sf::Vector2f(pos.x - radius, pos.y - radius));
         circle.setFillColor(sf::Color::Transparent);
         circle.setOutlineColor(sf::Color::Green);
         circle.setOutlineThickness(1.0f);
@@ -104,7 +104,7 @@ public:
     void debugDraw(sf::RenderWindow* window) const override {
         Math::Vector2 pos = getWorldPosition();
         sf::RectangleShape rect(sf::Vector2f(width, height));
-        rect.setPosition(pos.x - width / 2, pos.y - height / 2);
+        rect.setPosition(sf::Vector2f(pos.x - width / 2, pos.y - height / 2));
         rect.setFillColor(sf::Color::Transparent);
         rect.setOutlineColor(sf::Color::Green);
         rect.setOutlineThickness(1.0f);

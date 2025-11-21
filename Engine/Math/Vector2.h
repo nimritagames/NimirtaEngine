@@ -32,6 +32,12 @@ namespace Engine {
                 return *this;
             }
 
+            Vector2& operator*=(float scalar) {
+                x *= scalar;
+                y *= scalar;
+                return *this;
+            }
+
             float magnitude() const {
                 return std::sqrt(x * x + y * y);
             }

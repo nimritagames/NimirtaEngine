@@ -8,124 +8,98 @@
 namespace Engine {
 namespace Physics2D {
 
-// Impulse-based collision resolution
-// Based on expert recommendations from Erin Catto and physics tutorials
+// Sequential Impulse-based collision resolution
+// Based on Erin Catto's GDC tutorials and Box2D implementation
 class ImpulseResolver2D {
 public:
-    // Resolve collision using impulse method
+    // Resolve collision using sequential impulses with iterations
     static void resolve(Manifold& manifold) {
         Rigidbody2D* bodyA = manifold.bodyA;
         Rigidbody2D* bodyB = manifold.bodyB;
 
         if (!bodyA || !bodyB) return;
 
-        // Skip if both are static or kinematic
-        if (bodyA->getInverseMass() == 0 && bodyB->getInverseMass() == 0) {
-            return;
+        float totalInverseMass = bodyA->getInverseMass() + bodyB->getInverseMass();
+        if (totalInverseMass == 0.0f) return; // Both static
+
+        // VELOCITY ITERATIONS (6-8 iterations for convergence)
+        for (int i = 0; i < PhysicsConstants::VELOCITY_ITERATIONS; ++i) {
+            // Recalculate relative velocity each iteration
+            Math::Vector2 rv = bodyB->getVelocity() - bodyA->getVelocity();
+            float velAlongNormal = rv.dot(manifold.normal);
+
+            // Stop if separating fast enough
+            if (velAlongNormal > -PhysicsConstants::VELOCITY_EPSILON) {
+                break;
+            }
+
+            // Calculate impulse scalar (with restitution only on first iteration)
+            float e = (i == 0) ? manifold.restitution : 0.0f;
+            float jn = -(1.0f + e) * velAlongNormal / totalInverseMass;
+
+            // WARM STARTING: Accumulate impulse and clamp to prevent negative (pull)
+            float newImpulse = std::max(manifold.accumulatedNormalImpulse + jn, 0.0f);
+            float applyImpulse = newImpulse - manifold.accumulatedNormalImpulse;
+            manifold.accumulatedNormalImpulse = newImpulse;
+
+            // Apply impulse
+            Math::Vector2 impulse = manifold.normal * applyImpulse;
+
+            if (bodyA->isDynamic()) {
+                bodyA->setVelocity(bodyA->getVelocity() - impulse * bodyA->getInverseMass());
+            }
+
+            if (bodyB->isDynamic()) {
+                bodyB->setVelocity(bodyB->getVelocity() + impulse * bodyB->getInverseMass());
+            }
         }
 
-        // Calculate relative velocity
-        Math::Vector2 velA = bodyA->getVelocity();
-        Math::Vector2 velB = bodyB->getVelocity();
-        Math::Vector2 relativeVel = velB - velA;
+        // POSITION ITERATIONS (2-3 iterations for overlap correction)
+        for (int i = 0; i < PhysicsConstants::POSITION_ITERATIONS; ++i) {
+            if (manifold.penetration <= PhysicsConstants::SLOP) {
+                break;
+            }
 
-        // Velocity along the collision normal
-        float velAlongNormal = relativeVel.dot(manifold.normal);
+            // Calculate correction (Baumgarte stabilization)
+            float correction = (manifold.penetration - PhysicsConstants::SLOP) * PhysicsConstants::BAUMGARTE;
 
-        // Only resolve if objects are approaching (expert advice!)
-        if (velAlongNormal > 0) {
-            return;  // Objects are separating, don't resolve
-        }
+            // Clamp correction to prevent over-correction
+            correction = std::min(correction, PhysicsConstants::MAX_LINEAR_CORRECTION);
 
-        // Calculate impulse magnitude
-        // j = -(1 + e) * velAlongNormal / (1/massA + 1/massB)
-        float e = manifold.restitution;
-        float j = -(1.0f + e) * velAlongNormal;
-        j /= (bodyA->getInverseMass() + bodyB->getInverseMass());
+            float correctionPerMass = correction / totalInverseMass;
+            Math::Vector2 correctionVec = manifold.normal * correctionPerMass;
 
-        // Apply impulse
-        Math::Vector2 impulse = manifold.normal * j;
+            // Apply position correction
+            if (bodyA->isDynamic()) {
+                bodyA->translatePosition(correctionVec * -bodyA->getInverseMass());
+            }
 
-        if (bodyA->isDynamic()) {
-            bodyA->applyImpulse(impulse * -1.0f);
-        }
+            if (bodyB->isDynamic()) {
+                bodyB->translatePosition(correctionVec * bodyB->getInverseMass());
+            }
 
-        if (bodyB->isDynamic()) {
-            bodyB->applyImpulse(impulse);
-        }
-
-        // Friction impulse (tangent to normal)
-        applyFriction(manifold, relativeVel, j);
-
-        // Positional correction (Baumgarte stabilization - expert advice!)
-        correctPosition(manifold);
-    }
-
-private:
-    // Apply friction along the tangent
-    static void applyFriction(Manifold& manifold, const Math::Vector2& relativeVel, float normalImpulse) {
-        Rigidbody2D* bodyA = manifold.bodyA;
-        Rigidbody2D* bodyB = manifold.bodyB;
-
-        if (manifold.friction <= 0.0f) return;
-
-        // Calculate tangent (perpendicular to normal)
-        Math::Vector2 tangent = relativeVel - (manifold.normal * relativeVel.dot(manifold.normal));
-
-        float tangentLength = tangent.magnitude();
-        if (tangentLength < PhysicsConstants::VELOCITY_EPSILON) {
-            return;  // No tangential velocity
-        }
-
-        tangent = tangent.normalized();
-
-        // Calculate friction impulse magnitude
-        float velAlongTangent = relativeVel.dot(tangent);
-        float frictionImpulse = -velAlongTangent;
-        frictionImpulse /= (bodyA->getInverseMass() + bodyB->getInverseMass());
-
-        // Coulomb's law: friction <= mu * normal force
-        float mu = manifold.friction;
-        frictionImpulse = std::max(-std::abs(normalImpulse) * mu,
-                                     std::min(frictionImpulse, std::abs(normalImpulse) * mu));
-
-        // Apply friction impulse
-        Math::Vector2 frictionVec = tangent * frictionImpulse;
-
-        if (bodyA->isDynamic()) {
-            bodyA->applyImpulse(frictionVec * -1.0f);
-        }
-
-        if (bodyB->isDynamic()) {
-            bodyB->applyImpulse(frictionVec);
+            // Update penetration for next iteration
+            manifold.penetration -= correction;
         }
     }
 
-    // Positional correction to prevent sinking (Baumgarte stabilization)
-    // Expert advice: use slop and correction percentage
-    static void correctPosition(Manifold& manifold) {
+    // Warm start - apply cached impulses from previous frame
+    static void warmStart(Manifold& manifold) {
         Rigidbody2D* bodyA = manifold.bodyA;
         Rigidbody2D* bodyB = manifold.bodyB;
 
-        // Only correct if penetration exceeds slop threshold (expert advice!)
-        if (manifold.penetration <= PhysicsConstants::SLOP) {
-            return;
-        }
+        if (!bodyA || !bodyB) return;
+        if (manifold.accumulatedNormalImpulse == 0.0f) return;
 
-        // Calculate correction amount
-        // Use Baumgarte stabilization with 20% correction (expert advice!)
-        float correctionAmount = (manifold.penetration - PhysicsConstants::SLOP) * PhysicsConstants::BAUMGARTE;
-        correctionAmount /= (bodyA->getInverseMass() + bodyB->getInverseMass());
+        // Apply fraction of cached impulse (not full amount to prevent overshooting)
+        Math::Vector2 impulse = manifold.normal * (manifold.accumulatedNormalImpulse * 0.8f);
 
-        Math::Vector2 correction = manifold.normal * correctionAmount;
-
-        // Apply position correction proportional to inverse mass
         if (bodyA->isDynamic()) {
-            bodyA->translatePosition(correction * -bodyA->getInverseMass());
+            bodyA->setVelocity(bodyA->getVelocity() - impulse * bodyA->getInverseMass());
         }
 
         if (bodyB->isDynamic()) {
-            bodyB->translatePosition(correction * bodyB->getInverseMass());
+            bodyB->setVelocity(bodyB->getVelocity() + impulse * bodyB->getInverseMass());
         }
     }
 };

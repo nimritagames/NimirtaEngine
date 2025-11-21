@@ -185,15 +185,25 @@ private:
         if (distance > 0.0f) {
             manifold.normal = diff * (1.0f / distance);  // Normalize
         } else {
-            // Circle center is inside box - find best separating axis
+            // Circle center is inside box - use smallest overlap axis for separation
+            // This prevents the ball from getting stuck choosing wrong axis
             Math::Vector2 boxCenter = box->getWorldPosition();
             Math::Vector2 toCenter = circleCenter - boxCenter;
 
-            // Use axis with largest separation
-            if (std::abs(toCenter.x) > std::abs(toCenter.y)) {
+            // Calculate penetration on each axis
+            float halfWidth = box->getWidth() * 0.5f;
+            float halfHeight = box->getHeight() * 0.5f;
+
+            float overlapX = halfWidth - std::abs(toCenter.x);
+            float overlapY = halfHeight - std::abs(toCenter.y);
+
+            // Use axis with SMALLEST overlap (closest to edge)
+            if (overlapX < overlapY) {
                 manifold.normal = Math::Vector2(toCenter.x > 0 ? 1.0f : -1.0f, 0);
+                manifold.penetration = radius + overlapX;
             } else {
                 manifold.normal = Math::Vector2(0, toCenter.y > 0 ? 1.0f : -1.0f);
+                manifold.penetration = radius + overlapY;
             }
         }
 

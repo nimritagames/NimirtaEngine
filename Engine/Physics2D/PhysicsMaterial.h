@@ -34,6 +34,10 @@ public:
         return PhysicsMaterial2D(0.2f, 0.95f, 0.5f);  // Super bounce
     }
 
+    static PhysicsMaterial2D PerfectBounce() {
+        return PhysicsMaterial2D(0.0f, 1.0f, 1.0f);  // Perfect elastic (no friction, no energy loss)
+    }
+
     static PhysicsMaterial2D Ice() {
         return PhysicsMaterial2D(0.03f, 0.1f, 0.9f);  // Very slippery
     }
